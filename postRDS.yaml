@@ -1,0 +1,100 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "RDS for POST!-POST!-POST! application, You need to set SecurityGroup to make this DB connect to your EC2Instance after this stack executed."
+#
+Parameters:
+  ParamStackName:
+    Type: String
+  ParamMultiAZ:
+    Type: String
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  ParamDeletionPolicy:
+    Type: String
+    Default: Delete
+    AllowedValues:
+      - Delete
+      - Retain
+  ParamDBInstanceClass:
+    Type: String
+    Default: "db.t3.medium"
+    AllowedValues:
+      - "db.t3.micro"
+      - "db.t3.medium"
+      - "db.t3.large"
+      - "db.m5.large"
+      - "db.m5.xlarge"
+      - "db.m5.2xlarge"
+      - "db.m5.4xlarge"
+      - "db.m5.8xlarge"
+      - "db.m5.16xlarge"
+      - "db.m5.24xlarge"
+      - "db.m6g.xlarge"
+      - "db.m6g.2xlarge"
+      - "db.m6g.4xlarge"
+      - "db.m6g.8xlarge"
+      - "db.m6g.12xlarge"
+      - "db.m6g.16xlarge"
+  ParamDBName:
+    Type: String
+    Default: ""
+  ParamMasterUsername:
+    Type: String
+    Default: ""
+  ParamMasterUserPassword:
+    Type: String
+    Default: ""
+  ParamAllocatedStorage:
+    Type: Number
+    Default: 20
+  ParamMaxAllocatedStorage:
+    Type: Number
+    Default: 1000
+  ParamStorageType:
+    Type: String
+    Default: gp2
+    AllowedValues:
+      - gp2
+      - standard
+  ParamDBParameterGroupName:
+    Type: String
+    Default: ""
+#
+Resources:
+################-- Database --##################
+  SecurityGroupDB:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "SecurityGroup for RDS of PostPostPost application."
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${ParamStackName}-VpcId"
+  Database:
+    Type: "AWS::RDS::DBInstance"
+    DeletionPolicy: Delete
+    Properties:
+      AllocatedStorage: !Ref ParamAllocatedStorage
+      MaxAllocatedStorage: !Ref ParamMaxAllocatedStorage
+      StorageType: !Ref ParamStorageType
+      BackupRetentionPeriod: 0
+      DBInstanceClass: !Ref ParamDBInstanceClass
+      DBName: !Ref ParamDBName
+      Engine: MySQL
+      MasterUsername: !Ref ParamMasterUsername
+      MasterUserPassword: !Ref ParamMasterUserPassword
+      VPCSecurityGroups:
+        - !GetAtt SecurityGroupDB.GroupId
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      DBParameterGroupName: !Ref ParamDBParameterGroupName
+      MultiAZ: !Ref ParamMultiAZ
+  DBSubnetGroup:
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties:
+      DBSubnetGroupDescription: "DB-Subnet-Group"
+      SubnetIds:
+        - Fn::ImportValue:
+            !Sub "${ParamStackName}-SubnetLeftId"
+        - Fn::ImportValue:
+            !Sub "${ParamStackName}-SubnetRightId"
