@@ -1,0 +1,156 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "VPC IntenetGateway Subnet RouteTable ACL"
+#
+Resources:
+#############-- VPC & InternetGateway --#############
+  Vpc:
+    Type: "AWS::EC2::VPC"
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: "Vpc-set"
+  InternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+        - Key: Name
+          Value: "IGW-vpc"
+  VpcInternetGatewayAttach:
+    Type: "AWS::EC2::VPCGatewayAttachment"
+    Properties:
+      VpcId: !Ref Vpc
+      InternetGatewayId: !Ref InternetGateway
+#############-- Subnets --#############
+  SubnetLeft:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ap-northeast-1]
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: "Subnet-Left"
+  SubnetRight:
+    Type: "AWS::EC2::Subnet"
+    Properties:
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs ap-northeast-1]
+      VpcId: !Ref Vpc
+      Tags:
+        - Key: Name
+          Value: "Subnet-Right"
+#############-- RouteTables --#############
+  RouteTableLeft:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref Vpc
+  RouteLeft:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref RouteTableLeft
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    DependsOn: VpcInternetGatewayAttach
+  RouteTableAssociationLeft:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref SubnetLeft
+      RouteTableId: !Ref RouteTableLeft
+#
+  RouteTableRight:
+    Type: "AWS::EC2::RouteTable"
+    Properties:
+      VpcId: !Ref Vpc
+  RouteRight:
+    Type: "AWS::EC2::Route"
+    Properties:
+      RouteTableId: !Ref RouteTableRight
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+    DependsOn: VpcInternetGatewayAttach
+  RouteTableAssociationRight:
+    Type: "AWS::EC2::SubnetRouteTableAssociation"
+    Properties:
+      SubnetId: !Ref SubnetRight
+      RouteTableId: !Ref RouteTableRight
+  ##############-- ACL --################
+  #Left
+  AclLeft:
+    Type: "AWS::EC2::NetworkAcl"
+    Properties:
+      VpcId: !Ref Vpc
+  #In
+  AclEntryLeftSshIn:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      NetworkAclId: !Ref AclLeft
+      Egress: false
+      RuleNumber: 100
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+      Protocol: -1
+  #Out
+  AclEntryLeftSshOut:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      NetworkAclId: !Ref AclLeft
+      Egress: true
+      RuleNumber: 100
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+      Protocol: -1
+  AclAssociationLeft:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref AclLeft
+      SubnetId: !Ref SubnetLeft
+#Right
+  AclRight:
+    Type: "AWS::EC2::NetworkAcl"
+    Properties:
+      VpcId: !Ref Vpc
+  #In
+  AclEntryRightSshIn:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      NetworkAclId: !Ref AclRight
+      Egress: false
+      RuleNumber: 100
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+      Protocol: -1
+  #Out
+  AclEntryRightSshOut:
+    Type: "AWS::EC2::NetworkAclEntry"
+    Properties:
+      NetworkAclId: !Ref AclRight
+      Egress: true
+      RuleNumber: 100
+      RuleAction: allow
+      CidrBlock: 0.0.0.0/0
+      Protocol: -1
+  AclAssociationRight:
+    Type: "AWS::EC2::SubnetNetworkAclAssociation"
+    Properties:
+      NetworkAclId: !Ref AclRight
+      SubnetId: !Ref SubnetRight
+#
+Outputs:
+  OutVpc:
+    Description: "VpcId"
+    Value: !Ref Vpc
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  OutSubnetLeft:
+    Description: "SubnetLeftId"
+    Value: !Ref SubnetLeft
+    Export:
+      Name: !Sub "${AWS::StackName}-SubnetLeftId"
+  OutSubnetRight:
+    Description: "SubnetRightId"
+    Value: !Ref SubnetRight
+    Export:
+      Name: !Sub "${AWS::StackName}-SubnetRightId"
