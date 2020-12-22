@@ -1,6 +1,6 @@
 ---
 AWSTemplateFormatVersion: "2010-09-09"
-Description: "RDS for POST!-POST!-POST! application, You need to set SecurityGroup to make this DB connect to your EC2Instance after this stack executed."
+Description: "RDS Template"
 #
 Parameters:
   ParamStackName:
