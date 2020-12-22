@@ -1,0 +1,696 @@
+---
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "ECS template"
+###
+Parameters:
+  ParamStackName:
+    Type: String
+  ParamKeyName:
+    Description: "Select a KeyName to connect to EC2 instances"
+    Type: "AWS::EC2::KeyPair::KeyName"
+    Default: ""
+  ParamImageId:
+    Description: "the Image ID of EC2 that you deal with in this Cluster"
+    Type: String
+    Default: "ami-0b60185623255ce57"
+  ParamMaxSize:
+    Description: "Cluster maximum capacity"
+    Type: Number
+    Default: "2"
+  ParamDesiredCapacity:
+    Description: "Cluster desired capacity" 
+    Type: Number
+    Default: "2"
+  ParamInstanceType:
+    Description: "Select a Instance type of EC2 that you deal with in this Cluster"
+    Type: String
+    Default: "t3.medium"
+    AllowedValues:
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      #
+      - t3a.small
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t3a.2xlarge
+      #
+      - t4g.medium
+      - t4g.large
+      - t4g.xlarge
+      - t4g.2xlarge
+      #
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
+      - m5.12xlarge
+      - m5.16xlarge
+      - m5.24xlarge
+      #
+      - m5d.large
+      - m5d.xlarge
+      - m5d.2xlarge
+      - m5d.4xlarge
+      - m5d.8xlarge
+      - m5d.12xlarge
+      - m5d.16xlarge
+      - m5d.24xlarge
+      #
+      - m5a.large
+      - m5a.xlarge
+      - m5a.2xlarge
+      - m5a.4xlarge
+      - m5a.8xlarge
+      - m5a.12xlarge
+      - m5a.16xlarge
+      - m5a.24xlarge
+      #
+      - m5ad.large
+      - m5ad.xlarge
+      - m5ad.2xlarge
+      - m5ad.4xlarge
+      - m5ad.8xlarge
+      - m5ad.12xlarge
+      - m5ad.16xlarge
+      - m5ad.24xlarge
+      #
+      - m5n.large
+      - m5n.xlarge
+      - m5n.2xlarge
+      - m5n.4xlarge
+      - m5n.8xlarge
+      - m5n.12xlarge
+      - m5n.16xlarge
+      - m5n.24xlarge
+      #
+      - m5dn.large
+      - m5dn.xlarge
+      - m5dn.2xlarge
+      - m5dn.4xlarge
+      - m5dn.8xlarge
+      - m5dn.12xlarge
+      - m5dn.16xlarge
+      - m5dn.24xlarge
+      #
+      - m6g.medium
+      - m6g.large
+      - m6g.xlarge
+      - m6g.2xlarge
+      - m6g.4xlarge
+      - m6g.8xlarge
+      - m6g.12xlarge
+      - m6g.16xlarge
+  ParamPhpImage:
+    Description: "PHP container image"
+    Type: String
+    Default: "" 
+  ParamNginxImage:
+    Description: "NGINX container image"
+    Type: String
+    Default: ""
+  ParamAwsAccessKey:
+    Description: "AWS AccessKey to access S3"
+    Type: String
+    Default: ""
+  ParamAwsSecretAccessKey:
+    Description: "AWS Secret AccessKey of your AccessKey"
+    Type: String
+    Default: ""
+  ParamAppDebug:
+    Description: "Laravel Debug Mode"
+    Type: String
+    Default: false
+    AllowedValues:
+      - false
+      - true
+  ParamAppEnv:
+    Description: "Laravel Environment"
+    Type: String
+    Default: production
+    AllowedValues:
+      - production
+      - local
+  ParamDBHost:
+    Description: "RDS Endpoint"
+    Type: String
+  ParamDBPassword:
+    Description: "RDS Password"
+    Type: String
+    Default: ""
+  ParamAwsDefaultRegion:
+    Description: "S3 Region"
+    Type: String
+    Default: ""
+  ParamAwsBucket:
+    Description: "S3 Storage Name"
+    Type: String
+    Default: ""
+  ParamCertificateArn:
+    Description: "Certificate for SSL/TLS"
+    Type: String
+    Default: ""
+  ParamServiceDesiredCount:
+    Description: "Service desired count of tasks"
+    Type: Number
+    Default: 4
+  ParamServiceMaxCapacity:
+    Description: "Maximum capacity of tasks"
+    Type: Number
+    Default: 6
+  ParamServiceMinCapacity:
+    Description: "Minimum capacity of tasks"
+    Type: Number
+    Default: 2
+  ParamServiceCooldown:
+    Description: "Cooldown Time"
+    Type: Number
+    Default: 60
+  ParamHostedZoneId:
+    Description: "the ID of the Hosted Zone"
+    Type: String
+    Default: ""
+  ParamRoute53Name:
+    Description: "Domein Name"
+    Type: String
+    Default: ""
+###
+Resources:
+  #################-- SecurityGroup --##################
+  SecurityGroupLaunchConfiguration:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "SG for LaunchConfiguration"
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${ParamStackName}-VpcId"
+  SecurityGroupIngressSSH:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: !Ref SecurityGroupLaunchConfiguration
+      CidrIp: 0.0.0.0/0
+      IpProtocol: tcp
+      FromPort: 22
+      ToPort: 22
+  SecurityGroupIngressHTTP:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: !Ref SecurityGroupLaunchConfiguration
+      CidrIp: 0.0.0.0/0
+      IpProtocol: tcp
+      FromPort: 80
+      ToPort: 80
+  SecurutyGroupIngressALB:
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: !Ref SecurityGroupLaunchConfiguration
+      SourceSecurityGroupId: !Ref SecurityGroupLoadBalancer
+      IpProtocol: tcp
+      FromPort: 0
+      ToPort: 65535
+  ##################-- Cluster --#####################
+  EcsCluster:
+    Type: "AWS::ECS::Cluster"
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-Cluster"
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-Cluster"
+  AutoScalingGroup:
+    Type: "AWS::AutoScaling::AutoScalingGroup"
+    Properties:
+      VPCZoneIdentifier:
+        - Fn::ImportValue:
+            !Sub "${ParamStackName}-SubnetLeftId"
+        - Fn::ImportValue:
+            !Sub "${ParamStackName}-SubnetRightId"
+      LaunchConfigurationName: !Ref LaunchConfiguration
+      MinSize: "1"
+      MaxSize: !Ref ParamMaxSize
+      DesiredCapacity: !Ref ParamDesiredCapacity
+  LaunchConfiguration:
+    Type: "AWS::AutoScaling::LaunchConfiguration"
+    Properties:
+      AssociatePublicIpAddress: true
+      ImageId: !Ref ParamImageId
+      InstanceType: !Ref ParamInstanceType
+      IamInstanceProfile: !Ref ProfileRoleEcsInstance
+      KeyName: !Ref ParamKeyName
+      SecurityGroups:
+        - !Ref SecurityGroupLaunchConfiguration
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          echo ECS_CLUSTER=${EcsCluster} >> /etc/ecs/ecs.config
+          yum install -y aws-cfn-bootstrap
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource AutoScalingGroup --region &{AWS::Region}
+####################-- Task Definition --#####################
+  TaskDefinitionContainer:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      Family: "postpostpost"
+      networkMode: bridge
+      ExecutionRoleArn: !GetAtt RoleEcsTaskExecution.Arn
+      TaskRoleArn: !GetAtt RoleTaskRole.Arn
+      ContainerDefinitions:
+        - Name: "php"
+          Image: !Ref ParamPhpImage
+          Memory: 500
+          Cpu: 512
+          Essential: true
+          Environment:
+            - Name: APP_NAME
+              Value: Post!-Post!-Post!
+            - Name: APP_ENV
+              Value: !Ref ParamAppEnv
+            - Name: APP_KEY
+              Value: ""
+            - Name: APP_DEBUG
+              Value: !Ref ParamAppDebug
+            - Name: LOG_CHANNEL
+              Value: stack
+            - Name: LOG_LEVEL
+              Value: debug
+            - Name: DB_CONNECTION
+              Value: mysql
+            - Name: DB_HOST
+              Value: !Ref ParamDBHost
+            - Name: DB_PORT
+              Value: 3306
+            - Name: DB_DATABASE
+              Value: postpostpost
+            - Name: DB_USERNAME
+              Value: project
+            - Name: DB_PASSWORD
+              Value: !Ref ParamDBPassword
+            - Name: SESSION_DRIVER
+              Value: database
+            - Name: SESSION_LIFETIME
+              Value: 120
+            - Name: AWS_ACCESS_KEY_ID
+              Value: !Ref ParamAwsAccessKey
+            - Name: AWS_SECRET_ACCESS_KEY
+              Value: !Ref ParamAwsSecretAccessKey
+            - Name: AWS_DEFAULT_REGION
+              Value: !Ref ParamAwsDefaultRegion
+            - Name: AWS_BUCKET
+              Value: !Ref ParamAwsBucket
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
+        - Name: "nginx"
+          Image: !Ref ParamNginxImage
+          Memory: 500
+          PortMappings:
+            - HostPort: 0
+              ContainerPort: 80
+              Protocol: tcp
+          Cpu: 512
+          Essential: true
+          Links:
+            - "php"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref "AWS::Region"
+              awslogs-stream-prefix: ecs
+####################-- Role --#####################
+  RoleTaskRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "ecs-tasks.amazonaws.com"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  RoleEcsTaskExecution:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "ecs-tasks.amazonaws.com"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  #
+  ProfileRoleEcsInstance:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+        - !Ref RoleEcsInstance
+  RoleEcsInstance:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "ec2.amazonaws.com"
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonRDSFullAccess #RDS
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess #S3
+####################-- LoadBalancer --####################
+  SecurityGroupLoadBalancer:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "SG for ALB"
+      VpcId:
+        Fn::ImportValue: !Sub "${ParamStackName}-VpcId"
+  # SecurityGroupLoadBalancerIngressHTTP: #check
+  #   Type: "AWS::EC2::SecurityGroupIngress"
+  #   Properties:
+  #     GroupId: !Ref SecurityGroupLoadBalancer
+  #     CidrIp: 0.0.0.0/0
+  #     IpProtocol: tcp
+  #     FromPort: 80
+  #     ToPort: 80
+  SecurityGroupLoadBalancerIngressHTTPS: #check
+    Type: "AWS::EC2::SecurityGroupIngress"
+    Properties:
+      GroupId: !Ref SecurityGroupLoadBalancer
+      CidrIp: 0.0.0.0/0
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+  #
+  LoadBalancerEcs:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      Scheme: internet-facing
+      SecurityGroups:
+        - !Ref SecurityGroupLoadBalancer
+      Subnets:
+        - Fn::ImportValue:
+            !Sub "${ParamStackName}-SubnetLeftId"
+        - Fn::ImportValue:
+            !Sub "${ParamStackName}-SubnetRightId"
+      Type: application
+  #
+  # ListenerEcs:
+  # ListenerHTTPS:
+  #   Type: "AWS::ElasticLoadBalancingV2::Listener"
+  #   Properties:
+  #     LoadBalancerArn: !Ref LoadBalancerEcs
+  #     DefaultActions:
+  #       - TargetGroupArn: !Ref TargetGroupEcs
+  #         Type: forward
+  #     Port: 80
+  #     Protocol: HTTP
+  #
+  ListenerHTTPS:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancerEcs
+      DefaultActions:
+        - TargetGroupArn: !Ref TargetGroupEcs
+          Type: forward
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref ParamCertificateArn
+      SslPolicy: ELBSecurityPolicy-2016-08
+  ListenerRuleEcs:
+    Type: "AWS::ElasticLoadBalancingV2::ListenerRule"
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupEcs
+      Conditions:
+        - Field: path-pattern
+          Values: [/]
+      ListenerArn: !Ref ListenerHTTPS
+      # ListenerArn: !Ref ListenerEcs
+      Priority: 1
+  #
+  TargetGroupEcs:
+    Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 2
+      Matcher:
+        HttpCode: 200-299
+      Protocol: HTTP
+      Port: 80
+      TargetType: instance
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${ParamStackName}-VpcId"
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 60
+  ##################-- Service --###################
+  ServiceEcs:
+    Type: "AWS::ECS::Service"
+    #DependsOn: ListenerEcs
+    DependsOn: ListenerHTTPS
+    Properties:
+      Cluster: !Ref EcsCluster
+      DesiredCount: !Ref ParamServiceDesiredCount
+      TaskDefinition: !Ref TaskDefinitionContainer
+      LaunchType: EC2
+      LoadBalancers:
+        - ContainerName: "nginx"
+          ContainerPort: 80
+          TargetGroupArn: !Ref TargetGroupEcs
+      Role: !Ref RoleService
+      SchedulingStrategy: REPLICA
+      PlacementStrategies:
+        - Type: spread
+          Field: attribute:ecs.availability-zone
+        - Type: spread
+          Field: instanceId
+  # AWSServiceRoleForECS の Arn
+  RoleService:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "ecs.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: service-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ec2:AttachNetworkInterface"
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:CreateNetworkInterfacePermission"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:DeleteNetworkInterfacePermission"
+                  - "ec2:Describe*"
+                  - "ec2:DetachNetworkInterface"
+                  - "elasticloadbalancing:DeregisterInstancesFromLoadBalancer"
+                  - "elasticloadbalancing:DeregisterTargets"
+                  - "elasticloadbalancing:Describe*"
+                  - "elasticloadbalancing:RegisterInstancesWithLoadBalancer"
+                  - "elasticloadbalancing:RegisterTargets"
+                  - "route53:ChangeResourceRecordSets"
+                  - "route53:CreateHealthCheck"
+                  - "route53:DeleteHealthCheck"
+                  - "route53:Get*"
+                  - "route53:List*"
+                  - "route53:UpdateHealthCheck"
+                  - "servicediscovery:DeregisterInstance"
+                  - "servicediscovery:Get*"
+                  - "servicediscovery:List*"
+                  - "servicediscovery:RegisterInstance"
+                  - "servicediscovery:UpdateInstanceCustomHealthStatus"
+                Resource: "*"
+              - Effect: Allow
+                Action: "autoscaling:Describe"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "autoscaling:DeletePolicy"
+                  - "autoscaling:PutScalingPolicy"
+                  - "autoscaling:SetInstanceProtection"
+                  - "autoscaling:UpdateAutoScalingGroup"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "autoscaling-plans:CreateScalingPlan"
+                  - "autoscaling-plans:DeleteScalingPlan"
+                  - "autoscaling-plans:DescribeScalingPlans"
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "cloudwatch:DeleteAlarms"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:PutMetricAlarm"
+                Resource: "arn:aws:cloudwatch:*:*:alarm:*"
+              - Effect: Allow
+                Action:
+                  - "ec2:CreateTags"
+                Resource: "arn:aws:ec2:*:*:network-interface/*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogGroup"
+                  - "logs:DescribeLogGroups"
+                  - "logs:PutRetentionPolicy"
+                Resource: "arn:aws:logs:*:*:log-group:/aws/ecs/*"
+              - Effect: Allow
+                Action:
+                  - "logs:CreateLogStream"
+                  - "logs:DescribeLogStreams"
+                  - "logs:PutLogEvents"
+                Resource: "arn:aws:logs:*:*:log-group:/aws/ecs/*:log-stream:*"
+              - Effect: Allow
+                Action:
+                  - "ecs:CreateCluster"
+                  - "ecs:DeregisterContainerInstance"
+                  - "ecs:DiscoverPollEndpoint"
+                  - "ecs:Poll"
+                  - "ecs:RegisterContainerInstance"
+                  - "ecs:StartTelemetrySession"
+                  - "ecs:Submit*"
+                Resource: "*"
+#############-- Application Auto Scaling --#############
+  ScalableTargetService:
+    Type: "AWS::ApplicationAutoScaling::ScalableTarget"
+    Properties:
+      MaxCapacity: !Ref ParamServiceMaxCapacity
+      MinCapacity: !Ref ParamServiceMinCapacity
+      ResourceId: !Join ["",[service/,!Ref EcsCluster,/,!GetAtt [ServiceEcs,Name]]]
+      RoleARN: !GetAtt [RoleApplicationAutoScaling,Arn]
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+  ScalingPolicyScaleOut:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties:
+      PolicyName: "Scale-Out-Policy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTargetService
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ExactCapacity
+        # AdjustmentType: PercentChangeInCapacity
+        Cooldown: !Ref ParamServiceCooldown
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalLowerBound: 0
+            ScalingAdjustment: 2
+  ScalingPolicyScaleIn:
+    Type: "AWS::ApplicationAutoScaling::ScalingPolicy"
+    Properties:
+      PolicyName: "Scale-In-Policy"
+      PolicyType: StepScaling
+      ScalingTargetId: !Ref ScalableTargetService
+      StepScalingPolicyConfiguration:
+        AdjustmentType: ExactCapacity
+        # AdjustmentType: PercentChangeInCapacity
+        Cooldown: !Ref ParamServiceCooldown
+        MetricAggregationType: Average
+        StepAdjustments:
+          - MetricIntervalUpperBound: 0
+            ScalingAdjustment: 2
+###################-- Alarm --###################
+  AlarmCPUUtilizationHigh:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmName: "ServiceScalingOutAlarm"
+      AlarmDescription: "This alarm judges if the service needs to add an extra task in the instance."
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Statistic: Average
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 75
+      AlarmActions:
+        - !Ref ScalingPolicyScaleOut
+  AlarmCPUUtilizationLow:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      AlarmName: "ServiceScalingInAlarm"
+      AlarmDescription: "This alarm decreases the numbers of the services we manage"
+      Namespace: AWS/ECS
+      MetricName: CPUUtilization
+      Statistic: Average
+      ComparisonOperator: LessThanThreshold
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 25
+      AlarmActions:
+        - !Ref ScalingPolicyScaleIn
+  RoleApplicationAutoScaling:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "application-autoscaling.amazonaws.com"
+            Action: "sts:AssumeRole"
+      Path: /
+      Policies:
+        - PolicyName: application-auto-scaling-policy
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ecs:DescribeServices"
+                  - "ecs:UpdateService"
+                  - "cloudwatch:DescribeAlarms"
+                  - "cloudwatch:DeleteAlarms"
+                  - "cloudwatch:PutMetricAlarm"
+                  - "application-autoscaling:*"
+                Resource: "*"
+###################-- Log Group --#####################
+  CloudWatchLogsGroup:
+    Type: "AWS::Logs::LogGroup"
+    Properties:
+      LogGroupName: !Join ["-", [ECSLogGroupTest, !Ref "AWS::StackName"]]
+      RetentionInDays: 14
+###################-- Route53 --#####################
+  Route53RecordSet:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      HostedZoneId: !Ref ParamHostedZoneId
+      Comment: "a Record for ten-post.com"
+      Name: !Ref ParamRoute53Name
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancerEcs.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancerEcs.DNSName
+###
+Outputs:
+  Cluster:
+    Description: "ECS Cluster"
+    Value: !Ref EcsCluster
+  Service:
+    Description: "Service"
+    Value: !Ref ServiceEcs
+  TaskDefinition:
+    Description: "TaskDefinition"
+    Value: !Ref TaskDefinitionContainer
+  LogGroup:
+    Description: "Log Group for ECS"
+    Value: !Ref CloudWatchLogsGroup
+  StackName:
+    Description: "Stack name"
+    Value: !Sub ${AWS::StackName}
