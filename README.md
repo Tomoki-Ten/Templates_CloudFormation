@@ -1,2 +1,2 @@
-# template_CloudFormation_ECS
+# Template_AWS_CloudFormation
 a template set for building an ecs stack.
